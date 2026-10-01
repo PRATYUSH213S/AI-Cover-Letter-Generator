@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { generateCoverLetter, streamCoverLetter } from "../openaiClient.js";
+import { generateCoverLetter, streamCoverLetter } from "../geminiClient.js";
 import { validateCoverLetterRequest } from "../validate.js";
 import { clientGoneSignal, sendEvent, startSse } from "./sse.js";
 
@@ -21,9 +21,9 @@ function preflight(req, res) {
     res.status(invalidRequest.status).json(invalidRequest.body);
     return null;
   }
-  if (!process.env.OPENAI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
     res.status(503).json({
-      error: "OpenAI is not configured on this server. Set OPENAI_API_KEY in server/.env.",
+      error: "Gemini is not configured on this server. Set GEMINI_API_KEY in server/.env.",
     });
     return null;
   }
@@ -75,7 +75,7 @@ router.post("/stream", async (req, res) => {
 });
 
 function replyWithSafeError(res, err) {
-  // Errors from openaiClient are already sanitized; anything else is our bug
+  // Errors from geminiClient are already sanitized; anything else is our bug
   // and only the fact that it happened is reported, never its text.
   if (!err.status) {
     console.error("Unhandled error in cover letter route:", err);

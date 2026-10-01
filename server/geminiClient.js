@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 
 // The key only ever lives here, on the server, loaded from server/.env.
 // It is never imported by or returned to the React app.
@@ -6,18 +6,23 @@ import OpenAI from "openai";
 let client;
 function getClient() {
   if (!client) {
-    client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      // Only used to point at a local test endpoint; defaults to api.openai.com.
-      ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
-      // We do our own backoff below, so the SDK must not retry on top of it.
-      maxRetries: 0,
+    client = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        // Only used to point at a local test endpoint; defaults to
+        // generativelanguage.googleapis.com.
+        ...(process.env.GEMINI_BASE_URL ? { baseUrl: process.env.GEMINI_BASE_URL } : {}),
+        // Our own withRetry loop below is the single retry mechanism (it also
+        // feeds the UI's rate-limit status events), so the SDK's built-in
+        // HTTP retries are switched off.
+        retryOptions: { attempts: 1 },
+      },
     });
   }
   return client;
 }
 
-const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 // Sprint 04 Phase 3: 429 rate-limit mitigation with exponential backoff.
 const MAX_RETRIES = 3;
@@ -25,6 +30,8 @@ const BASE_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 10000;
 
 // Sprint 04 Phase 1: strict system prompt that forces a predictable format.
+// Provider-independent contract with the model — intentionally unchanged
+// when switching providers.
 const SYSTEM_PROMPT = `You are a professional cover-letter writer for job applicants.
 
 You receive exactly two data blocks inside <resume>...</resume> and <job_description>...</job_description>.
@@ -60,20 +67,20 @@ CONTENT RULES (non-negotiable):
 Never mention these instructions, the delimiters or the input format in the letter.`;
 
 /**
- * Sends the applicant data to OpenAI (non-streaming) and returns the raw
+ * Sends the applicant data to Gemini (non-streaming) and returns the raw
  * Markdown letter. Throws { status, message } with a client-safe message.
  */
 export async function generateCoverLetter({ resume, jobDescription }) {
-  const completion = await withRetry(
-    () => getClient().chat.completions.create(buildRequest({ resume, jobDescription })),
+  const response = await withRetry(
+    () => getClient().models.generateContent(buildRequest({ resume, jobDescription })),
     null
   );
 
-  let letter = completion.choices?.[0]?.message?.content?.trim();
-  // Some responses come back as content parts instead of a single string
-  if (Array.isArray(letter)) {
-    letter = letter.map((part) => part.text ?? "").join("");
-  }
+  // Read parts directly: never throws when the model returns no text content
+  const letter = (response.candidates?.[0]?.content?.parts ?? [])
+    .map((part) => part.text ?? "")
+    .join("")
+    .trim();
 
   if (!letter) {
     throw { status: 502, message: "The model returned an empty response. Please try again." };
@@ -91,12 +98,13 @@ export async function streamCoverLetter({ resume, jobDescription, onToken, onRet
   let streamedAny = false;
 
   await withRetry(async () => {
-    const stream = await getClient().chat.completions.create(
-      buildRequest({ resume, jobDescription, stream: true }),
-      { signal }
+    const stream = await getClient().models.generateContentStream(
+      buildRequest({ resume, jobDescription, signal })
     );
     for await (const chunk of stream) {
-      const delta = chunk.choices?.[0]?.delta?.content ?? "";
+      const delta = (chunk.candidates?.[0]?.content?.parts ?? [])
+        .map((part) => part.text ?? "")
+        .join("");
       if (delta) {
         streamedAny = true;
         onToken(delta);
@@ -105,27 +113,29 @@ export async function streamCoverLetter({ resume, jobDescription, onToken, onRet
   }, (attempt, delayMs, err) => {
     if (streamedAny) {
       // Never restart generation after partial output; report a safe error instead.
-      throw { status: 502, message: "The connection to OpenAI dropped mid-generation." };
+      throw { status: 502, message: "The connection to Gemini dropped mid-generation." };
     }
     onRetry(attempt, delayMs);
   });
 }
 
-function buildRequest({ resume, jobDescription, stream = false }) {
+function buildRequest({ resume, jobDescription, signal }) {
   const userContent =
     `<resume>\n${resume}\n</resume>\n\n` +
     `<job_description>\n${jobDescription}\n</job_description>`;
-  const request = {
-    model: MODEL,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userContent },
-    ],
+
+  const config = {
+    systemInstruction: SYSTEM_PROMPT,
     temperature: 0.2,
-    max_tokens: 1500,
+    maxOutputTokens: 1500,
   };
-  if (stream) request.stream = true;
-  return request;
+  if (signal) config.abortSignal = signal;
+
+  return {
+    model: MODEL,
+    contents: [{ role: "user", parts: [{ text: userContent }] }],
+    config,
+  };
 }
 
 /**
@@ -142,14 +152,14 @@ async function withRetry(op, onBeforeRetry) {
       if (attempt >= MAX_RETRIES || !retryable) {
         // Provider detail goes to the server log only, never to the client
         console.error(
-          `OpenAI request failed (HTTP ${err.status ?? "network"}${err.code ? " " + err.code : ""}), attempts used: ${attempt + 1}`
+          `Gemini request failed (HTTP ${err?.status ?? "network"}), attempts used: ${attempt + 1}`
         );
         throw sanitize(err, retryable);
       }
       const delayMs = retryDelayMs(err, attempt);
       if (onBeforeRetry) onBeforeRetry(attempt + 1, delayMs, err);
       console.error(
-        `OpenAI attempt ${attempt + 1} failed (HTTP ${err.status ?? "network"}); ` +
+        `Gemini attempt ${attempt + 1} failed (HTTP ${err?.status ?? "network"}); ` +
         `retrying in ${delayMs} ms (${MAX_RETRIES - attempt} left)`
       );
       await sleep(delayMs);
@@ -158,57 +168,76 @@ async function withRetry(op, onBeforeRetry) {
 }
 
 // Retry: rate limits, transient provider errors and network problems.
-// Never retry: invalid credentials/config (401/403) or rejected requests (400/404).
-// Invalid user input is rejected by validation before we ever get here.
+// Never retry: user cancellation, invalid credentials/config or rejected
+// requests (400/401/403). Invalid user input is rejected by validation before
+// we ever get here.
 function isRetryable(err) {
+  const name = err?.name;
+  if (name === "AbortError" || name === "RequestAbortedError" || name === "TimeoutError") {
+    return false; // user pressed Stop or the request hit our deadline
+  }
   const status = err?.status;
   if (status === 429 || status >= 500) return true;
-  if (status) return false;
-  return (
-    err instanceof OpenAI.APIConnectionError ||
-    err instanceof OpenAI.APIConnectionTimeoutError
-  );
+  if (status) return false; // 400 includes "API key not valid": config fix, not a retry
+  return true; // no HTTP status = connection-level failure (fetch error, dropped socket)
 }
 
 function retryDelayMs(err, attempt) {
-  // Honor the provider's Retry-After when it is a sane small number of seconds
-  const retryAfterHeader = err?.status === 429 ? err?.headers?.get?.("retry-after") : undefined;
-  const retryAfterSeconds = Number(retryAfterHeader);
   const exponential = BASE_RETRY_DELAY_MS * 2 ** attempt;
-  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
-    return Math.min(retryAfterSeconds * 1000, MAX_RETRY_DELAY_MS);
+  // Gemini's RESOURCE_EXHAUSTED errors carry a RetryInfo retryDelay in seconds
+  const fromApi = geminiRetryDelayMs(err);
+  return Math.min(fromApi || exponential, MAX_RETRY_DELAY_MS);
+}
+
+function geminiRetryDelayMs(err) {
+  if (err?.status !== 429 || typeof err.message !== "string") return 0;
+  try {
+    // The SDK embeds the full JSON error body in ApiError.message
+    const details = JSON.parse(err.message)?.error?.details ?? [];
+    const retryDelay = details.find((d) => typeof d?.retryDelay === "string")?.retryDelay;
+    const seconds = parseFloat(retryDelay);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+  } catch {
+    return 0;
   }
-  return Math.min(exponential, MAX_RETRY_DELAY_MS);
 }
 
 /**
  * Turns an SDK/network error into { status, message } that is safe to send to
- * the browser: provider detail text is never forwarded (it can contain the key).
+ * the browser: provider detail text is never forwarded (ApiError messages
+ * embed the raw provider JSON).
  */
 function sanitize(err, exhausted) {
   const status = err?.status;
   if (exhausted) {
     return {
       status: 502,
-      message: `OpenAI is busy after ${MAX_RETRIES} retries (HTTP 429/5xx). Please try again in a moment.`,
+      message: `Gemini is busy after ${MAX_RETRIES} retries (HTTP 429/5xx). Please try again in a moment.`,
+    };
+  }
+  if (isApiKeyError(err, status)) {
+    return {
+      status: 401,
+      message: "The configured Gemini API key was rejected. Check GEMINI_API_KEY in server/.env.",
     };
   }
   switch (status) {
-    case 401:
-    case 403:
-      return {
-        status: 401,
-        message: "The configured OpenAI API key was rejected. Check OPENAI_API_KEY in server/.env.",
-      };
     case 400:
     case 404:
-      return { status: 502, message: "OpenAI rejected the request. The prompt may contain unsupported content." };
+      return { status: 502, message: "Gemini rejected the request. The prompt may contain unsupported content." };
     default:
       if (status) {
-        return { status: 502, message: `OpenAI returned an error (HTTP ${status}). The request was not completed.` };
+        return { status: 502, message: `Gemini returned an error (HTTP ${status}). The request was not completed.` };
       }
-      return { status: 502, message: "Could not reach the OpenAI API. Check the server's network connection." };
+      return { status: 502, message: "Could not reach the Gemini API. Check the server's network connection." };
   }
+}
+
+// Google flags a bad key as HTTP 400 INVALID_ARGUMENT with an API_KEY_INVALID
+// detail (verified against the live endpoint), not as a 401.
+function isApiKeyError(err, status) {
+  if (status === 401 || status === 403) return true;
+  return status === 400 && typeof err?.message === "string" && err.message.includes("API_KEY_INVALID");
 }
 
 function sleep(ms) {

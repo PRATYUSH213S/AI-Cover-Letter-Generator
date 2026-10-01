@@ -19,7 +19,7 @@ app.use(cors({ origin: corsOrigin }));
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    llmConfigured: Boolean(process.env.OPENAI_API_KEY),
+    llmConfigured: Boolean(process.env.GEMINI_API_KEY),
   });
 });
 
@@ -34,8 +34,10 @@ app.use("/api", (req, res) => {
 // In development (no dist folder) Vite serves the UI instead.
 const serverDir = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.join(serverDir, "../client/dist");
-if (fs.existsSync(clientDist)) {
-  app.use(express.static(clientDist));
+// express.static simply falls through when dist is absent (dev mode with Vite)
+app.use(express.static(clientDist));
+if (!fs.existsSync(clientDist)) {
+  console.log("Note: client/dist not found, serving API only (run `npm run build` in client/ for production mode)");
 }
 
 // Keep JSON on every error path (parser failures included) and never

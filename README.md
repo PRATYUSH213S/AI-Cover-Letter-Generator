@@ -1,7 +1,7 @@
 # AI Cover Letter — Sprint 04 (complete)
 
-React + JavaScript (Vite) frontend, Node.js + Express backend, OpenAI via the
-official Node.js SDK on the server only. No database: the Sprint 04 directive
+React + JavaScript (Vite) frontend, Node.js + Express backend, Google Gemini via the
+official @google/genai SDK on the server only. No database: the Sprint 04 directive
 requires no persistent storage, so MongoDB is intentionally absent.
 
 ## Structure
@@ -18,7 +18,7 @@ ai-cover-letter/
 │       └── styles.css
 └── server/
     ├── index.js               # express app, CORS, 32kb limit, health, static dist
-    ├── openaiClient.js        # SDK client, strict system prompt, backoff, streaming
+    ├── geminiClient.js        # SDK client, strict system prompt, backoff, streaming
     ├── validate.js            # input validation
     ├── routes/
     │   ├── coverLetter.js     # POST /api/cover-letter (+ /stream)
@@ -29,7 +29,7 @@ ai-cover-letter/
 ## Run (development)
 
 ```bash
-cd server && npm install && cp .env.example .env   # put your OpenAI key in .env
+cd server && npm install && cp .env.example .env   # put your Gemini key in .env
 npm run dev                                          # API on :5000
 
 cd client && npm install && npm run dev              # UI on :5173
@@ -45,6 +45,8 @@ cd ../server && npm start       # Express serves dist + the API on :PORT
 The server serves `client/dist` automatically when it exists — one deployable
 service. Set `CORS_ORIGIN` only if the frontend is hosted on a different origin.
 
+Provider: Google Gemini, model `GEMINI_MODEL` (default `gemini-2.5-flash`, free-tier supported).
+
 ## API
 
 `POST /api/cover-letter` — JSON body `{ "resume": "...", "jobDescription": "..." }`
@@ -54,8 +56,8 @@ service. Set `CORS_ORIGIN` only if the frontend is hosted on a different origin.
 | Valid request + key configured | `200 { "coverLetter": "<raw Markdown>" }` |
 | Missing / wrong-type / empty / too short/long fields | `400` with `details` |
 | Payload over 32 KB | `413` |
-| `OPENAI_API_KEY` not set on server | `503` |
-| OpenAI auth / rate-limit / server / network error | `401`, `429` or `502`, safe message only (provider detail stays in server logs) |
+| `GEMINI_API_KEY` not set on server | `503` |
+| Gemini auth / rate-limit / server / network error | `401`, `429` or `502`, safe message only (provider detail stays in server logs) |
 
 `POST /api/cover-letter/stream` — same body/validation, delivers Server-Sent
 Events while the model writes:
@@ -77,7 +79,7 @@ streamed. 401/403 and invalid input are never retried.
 
 ## Security notes
 
-- The OpenAI key lives only in `server/.env` (git-ignored); the client bundle
+- The Gemini key lives only in `server/.env` (git-ignored); the client bundle
   contains no key and no provider SDK.
 - Model output is untrusted: raw Markdown is parsed with `marked` and always
   sanitized with `DOMPurify` before being rendered.
@@ -86,7 +88,7 @@ streamed. 401/403 and invalid input are never retried.
 
 ## Sprint 04 status
 
-- [x] Phase 1 — OpenAI SDK, strict system prompt, predictable Markdown, server-side POST
+- [x] Phase 1 — LLM SDK (@google/genai), strict system prompt, predictable Markdown, server-side POST
 - [x] Phase 2 — Markdown parsed to sanitized HTML; one-click copy via `navigator.clipboard`
 - [x] Phase 3 — 429 exponential backoff (bounded); real SSE streaming, no spinners
 
@@ -94,8 +96,9 @@ streamed. 401/403 and invalid input are never retried.
 
 No paid API key exists in this sandbox. Full pipeline behavior (payload shape,
 stream chunking, 429/backoff, error mapping) was verified against a local mock
-speaking the real OpenAI wire format; a real HTTPS request to api.openai.com was
-also made and correctly mapped its live 401 response. UI, XSS and clipboard
+speaking the real Gemini REST/SSE wire format; a real HTTPS request to
+generativelanguage.googleapis.com was also made and correctly mapped its live
+key-rejection response. UI, XSS and clipboard
 states were verified end-to-end in headless Chromium.
 
 ## Deployment / hosting
@@ -104,6 +107,6 @@ Code is version-controlled in git. To complete the SUBMISSION checklist the repo
 must be pushed to a remote and deployed — create a GitHub repo, then
 `git remote add origin <url> && git push -u origin main`, and deploy `server`
 (Railway/Render: start command `npm start`, build command `npm install`; add
-`client` build `cd client && npm run build` before start; set `OPENAI_API_KEY`
+`client` build `cd client && npm run build` before start; set `GEMINI_API_KEY`
 in the host's environment). The sandbox used for development had no hosting
 credentials, so this step remains for the account holder.
