@@ -103,7 +103,10 @@ export async function streamCoverLetter({ resume, jobDescription, onToken, onRet
       }
     }
   }, (attempt, delayMs, err) => {
-    if (streamedAny) throw err; // no restart after partial output
+    if (streamedAny) {
+      // Never restart generation after partial output; report a safe error instead.
+      throw { status: 502, message: "The connection to OpenAI dropped mid-generation." };
+    }
     onRetry(attempt, delayMs);
   });
 }
@@ -137,6 +140,10 @@ async function withRetry(op, onBeforeRetry) {
     } catch (err) {
       const retryable = isRetryable(err);
       if (attempt >= MAX_RETRIES || !retryable) {
+        // Provider detail goes to the server log only, never to the client
+        console.error(
+          `OpenAI request failed (HTTP ${err.status ?? "network"}${err.code ? " " + err.code : ""}), attempts used: ${attempt + 1}`
+        );
         throw sanitize(err, retryable);
       }
       const delayMs = retryDelayMs(err, attempt);

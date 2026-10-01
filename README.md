@@ -1,36 +1,49 @@
-# AI Cover Letter — Sprint 04
+# AI Cover Letter — Sprint 04 (complete)
 
-React + JavaScript (Vite) frontend, Node.js + Express backend, OpenAI via the official
-Node.js SDK on the server only. MongoDB is intentionally not used: the Sprint 04
-directive requires no persistent storage.
+React + JavaScript (Vite) frontend, Node.js + Express backend, OpenAI via the
+official Node.js SDK on the server only. No database: the Sprint 04 directive
+requires no persistent storage, so MongoDB is intentionally absent.
 
 ## Structure
 
 ```
 ai-cover-letter/
-├── client/          # UI: resume input, job description input, generate button, raw-Markdown output
+├── client/
+│   ├── vite.config.js         # dev proxy: /api -> :5000
+│   └── src/
+│       ├── main.jsx
+│       ├── App.jsx            # inputs, generate/stop/copy buttons, streaming render
+│       ├── sseParser.js       # buffers incomplete SSE events across chunks
+│       ├── markdown.js        # marked + DOMPurify -> safe HTML
+│       └── styles.css
 └── server/
-    ├── index.js             # express app, CORS, 32kb limit, /api/health, JSON error handling
-    ├── routes/coverLetter.js# POST /api/cover-letter
-    ├── validate.js          # input validation
-    └── openaiClient.js      # OpenAI SDK client + strict system prompt (Phase 1)
+    ├── index.js               # express app, CORS, 32kb limit, health, static dist
+    ├── openaiClient.js        # SDK client, strict system prompt, backoff, streaming
+    ├── validate.js            # input validation
+    ├── routes/
+    │   ├── coverLetter.js     # POST /api/cover-letter (+ /stream)
+    │   └── sse.js             # tiny SSE helpers
+    └── .env.example           # -> copy to .env (git-ignored)
 ```
 
-## Run locally
+## Run (development)
 
 ```bash
-# Terminal 1 — backend (http://localhost:5000)
-cd server && npm install
-cp .env.example .env   # then paste your OpenAI key into .env
-npm run dev
+cd server && npm install && cp .env.example .env   # put your OpenAI key in .env
+npm run dev                                          # API on :5000
 
-# Terminal 2 — frontend (http://localhost:5173, proxies /api to the backend)
-cd client && npm install
-npm run dev
+cd client && npm install && npm run dev              # UI on :5173
 ```
 
-The OpenAI key lives only in `server/.env` (git-ignored). React never sees it; all LLM
-traffic goes through the Express backend.
+## Run (production, single service)
+
+```bash
+cd client && npm run build      # emits client/dist
+cd ../server && npm start       # Express serves dist + the API on :PORT
+```
+
+The server serves `client/dist` automatically when it exists — one deployable
+service. Set `CORS_ORIGIN` only if the frontend is hosted on a different origin.
 
 ## API
 
@@ -42,43 +55,55 @@ traffic goes through the Express backend.
 | Missing / wrong-type / empty / too short/long fields | `400` with `details` |
 | Payload over 32 KB | `413` |
 | `OPENAI_API_KEY` not set on server | `503` |
-| OpenAI auth error / rate limit / server error / unreachable | `401`, `429` or `502` with a safe message (provider details stay in server logs only) |
+| OpenAI auth / rate-limit / server / network error | `401`, `429` or `502`, safe message only (provider detail stays in server logs) |
 
-`POST /api/cover-letter/stream` — same body and validation, but the generation is
-delivered as Server-Sent Events while the model writes it:
+`POST /api/cover-letter/stream` — same body/validation, delivers Server-Sent
+Events while the model writes:
 
 ```
-data: {"token":"# Cover Letter\n\n"}   # one per model delta
-data: {"retry":{"attempt":1,"delayMs":1000}}   # transient failure being backed off
-data: {"error":"..."}                 # safe message, stream then closes
-data: {"done":true}
+data: {"token":"..."}                      # one per model delta
+data: {"retry":{"attempt":1,"delayMs":1000}}  # transient failure backing off
+data: {"error":"..."} | data: {"done":true}
 ```
 
-The client reads it with `fetch` + `response.body.getReader()` (EventSource cannot
-POST). `GET /api/health` → `{ "status": "ok", "llmConfigured": <bool> }`
+Read it with `fetch` + `response.body.getReader()` (EventSource cannot POST).
+`GET /api/health` → `{ "status": "ok", "llmConfigured": <bool> }`
 
-## Retry policy (Phase 3)
+## Retry policy
 
-- 429, 5xx and network errors retry with exponential backoff: 1s, 2s, 4s,
-  max 3 retries, honoring a sane `Retry-After` header when the provider sends one.
-- Never retried: invalid input (rejected with 400 before any provider call),
-  401/403 credential/config problems.
-- After exhaustion the browser gets one safe message; the full error stays server-side.
-- Once any token has been streamed the connection is never retried mid-letter;
-  the error is reported instead. The Stop button (AbortController) cancels cleanly.
+429 / 5xx / network errors: exponential backoff 1s → 2s → 4s (cap 10s),
+honoring a sane `Retry-After`, max 3 retries, never after partial output has been
+streamed. 401/403 and invalid input are never retried.
 
-## Sprint 04 phases
+## Security notes
 
-- [x] Phase 1 — OpenAI SDK integration, strict system prompt (forced Markdown
-      structure, resume-only facts, no invented content), secure server-side POST
-- [ ] Phase 2 — Markdown parsing → HTML rendering, Clipboard API copy
-- [x] Phase 3 — 429 exponential backoff with bounded retries, SSE streaming with
-      progressive word-by-word rendering in React
+- The OpenAI key lives only in `server/.env` (git-ignored); the client bundle
+  contains no key and no provider SDK.
+- Model output is untrusted: raw Markdown is parsed with `marked` and always
+  sanitized with `DOMPurify` before being rendered.
+- Resume/job description are passed as delimited DATA in the user message; the
+  system prompt explicitly refuses instructions found inside them.
 
-## Test notes
+## Sprint 04 status
 
-Integration testing of the full request pipeline (auth header, payload shape,
-response parsing, error mapping) was done against a local mock endpoint via the
-optional `OPENAI_BASE_URL` override, because no paid API key is available in the
-dev sandbox. Unset `OPENAI_BASE_URL` and the official SDK talks to `api.openai.com`
-directly. The project contains no fake AI responses.
+- [x] Phase 1 — OpenAI SDK, strict system prompt, predictable Markdown, server-side POST
+- [x] Phase 2 — Markdown parsed to sanitized HTML; one-click copy via `navigator.clipboard`
+- [x] Phase 3 — 429 exponential backoff (bounded); real SSE streaming, no spinners
+
+## Test notes (dev sandbox)
+
+No paid API key exists in this sandbox. Full pipeline behavior (payload shape,
+stream chunking, 429/backoff, error mapping) was verified against a local mock
+speaking the real OpenAI wire format; a real HTTPS request to api.openai.com was
+also made and correctly mapped its live 401 response. UI, XSS and clipboard
+states were verified end-to-end in headless Chromium.
+
+## Deployment / hosting
+
+Code is version-controlled in git. To complete the SUBMISSION checklist the repo
+must be pushed to a remote and deployed — create a GitHub repo, then
+`git remote add origin <url> && git push -u origin main`, and deploy `server`
+(Railway/Render: start command `npm start`, build command `npm install`; add
+`client` build `cd client && npm run build` before start; set `OPENAI_API_KEY`
+in the host's environment). The sandbox used for development had no hosting
+credentials, so this step remains for the account holder.

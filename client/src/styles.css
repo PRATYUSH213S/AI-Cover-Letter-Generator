@@ -114,6 +114,21 @@ body {
   background: #fbe9e9;
 }
 
+.copy-button {
+  padding: 12px 18px;
+  font: inherit;
+  font-weight: 600;
+  color: #1c7440;
+  background: #fff;
+  border: 1px solid #9ecfb2;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.copy-button:hover {
+  background: #eaf7ef;
+}
+
 .error {
   margin-top: 16px;
   padding: 12px 14px;
@@ -142,6 +157,25 @@ body {
   word-break: break-word;
   font: inherit;
   min-height: 120px;
+}
+
+/* Rendered-Markdown view: normal HTML flow, not preserved whitespace */
+.cover-letter-rendered {
+  white-space: normal;
+}
+
+.cover-letter-rendered h1 {
+  font-size: 1.25rem;
+  margin: 0 0 12px;
+}
+
+.cover-letter-rendered h2 {
+  font-size: 1rem;
+  margin: 16px 0 6px;
+}
+
+.cover-letter-rendered p {
+  margin: 0 0 10px;
 }
 
 .hint {

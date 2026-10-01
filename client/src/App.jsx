@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { parseSseEvents } from "./sseParser.js";
+import { renderMarkdownToSafeHtml } from "./markdown.js";
 
 const MAX_FIELD_CHARS = 20000;
 
@@ -10,16 +11,25 @@ export default function App() {
   const [error, setError] = useState("");
   const [retryInfo, setRetryInfo] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [copyState, setCopyState] = useState("idle"); // idle | copied | failed
   const abortControllerRef = useRef(null);
 
   // Stop an in-flight stream if the component goes away
   useEffect(() => () => abortControllerRef.current?.abort(), []);
+
+  // Reset the "Copied!" badge after a moment
+  useEffect(() => {
+    if (copyState !== "copied") return;
+    const t = setTimeout(() => setCopyState("idle"), 2000);
+    return () => clearTimeout(t);
+  }, [copyState]);
 
   async function handleGenerate() {
     if (isGenerating) return; // one generation at a time
     setError("");
     setRetryInfo(null);
     setCoverLetter("");
+    setCopyState("idle");
 
     // Mirrors the server checks so obvious mistakes never reach the provider
     if (resume.trim().length < 30) {
@@ -34,6 +44,7 @@ export default function App() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
     setIsGenerating(true);
+    let streamOpened = false;
 
     try {
       const response = await fetch("/api/cover-letter/stream", {
@@ -49,6 +60,7 @@ export default function App() {
         setError(data.error ?? `Request failed with status ${response.status}.`);
         return;
       }
+      streamOpened = true;
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -73,7 +85,11 @@ export default function App() {
       }
     } catch (err) {
       if (err.name !== "AbortError") {
-        setError("Could not reach the backend. Is the server running on port 5000?");
+        setError(
+          streamOpened
+            ? "The stream was interrupted before the letter finished."
+            : "Could not reach the backend. Is the server running on port 5000?"
+        );
       }
     } finally {
       setIsGenerating(false);
@@ -85,6 +101,20 @@ export default function App() {
   function handleStop() {
     abortControllerRef.current?.abort();
   }
+
+  async function handleCopy() {
+    try {
+      // The clipboard gets the raw Markdown, not the rendered HTML
+      await navigator.clipboard.writeText(coverLetter);
+      setCopyState("copied");
+    } catch {
+      // Happens without permission or in a non-secure context
+      setCopyState("failed");
+    }
+  }
+
+  // Memoized so re-renders during typing/scrolling do not re-parse the Markdown
+  const letterHtml = useMemo(() => renderMarkdownToSafeHtml(coverLetter), [coverLetter]);
 
   return (
     <main className="page">
@@ -130,6 +160,11 @@ export default function App() {
             Stop
           </button>
         )}
+        {coverLetter && !isGenerating && (
+          <button type="button" className="copy-button" onClick={handleCopy}>
+            {copyState === "copied" ? "Copied!" : copyState === "failed" ? "Copy failed" : "Copy to Clipboard"}
+          </button>
+        )}
       </div>
 
       {isGenerating && !coverLetter && (
@@ -141,15 +176,24 @@ export default function App() {
       )}
 
       {error && <p className="error">{error}</p>}
+      {copyState === "failed" && (
+        <p className="error">Copy failed — clipboard access was blocked by the browser.</p>
+      )}
 
       <section className="output">
-        <h2>Generated cover letter (raw Markdown)</h2>
+        <h2>Generated cover letter</h2>
         {coverLetter ? (
-          <pre className="cover-letter" aria-live="polite">{coverLetter}</pre>
+          // Safe: letterHtml is Markdown run through marked + DOMPurify; this is
+          // React's standard escape hatch for sanitizer-approved HTML.
+          <div
+            className="cover-letter cover-letter-rendered"
+            aria-live="polite"
+            dangerouslySetInnerHTML={{ __html: letterHtml }}
+          />
         ) : (
           <p className="hint">
             The cover letter streams in here word by word as the model writes it,
-            as raw Markdown. Formatting and copy-to-clipboard arrive in Phase 2.
+            rendered from its Markdown.
           </p>
         )}
       </section>

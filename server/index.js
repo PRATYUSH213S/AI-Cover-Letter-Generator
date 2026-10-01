@@ -1,4 +1,7 @@
 import "dotenv/config";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import express from "express";
 import coverLetterRouter from "./routes/coverLetter.js";
@@ -26,6 +29,14 @@ app.use("/api/cover-letter", coverLetterRouter);
 app.use("/api", (req, res) => {
   res.status(404).json({ error: `Not found: ${req.method} ${req.path}` });
 });
+
+// Production hosting: serve the built frontend from the same service.
+// In development (no dist folder) Vite serves the UI instead.
+const serverDir = path.dirname(fileURLToPath(import.meta.url));
+const clientDist = path.join(serverDir, "../client/dist");
+if (fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+}
 
 // Keep JSON on every error path (parser failures included) and never
 // leak stack traces to the client. (Express needs the 4-arg signature.)
