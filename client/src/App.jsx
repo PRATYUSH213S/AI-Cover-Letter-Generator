@@ -130,7 +130,8 @@ export default function App() {
         <div className="badges">
           <span className="badge">
             <span className="badge-dot badge-dot-blue" />
-            Powered by Gemini
+            devloped by Pratyush shukla
+            
           </span>
           <span className="badge">
             <span className="badge-dot badge-dot-green" />
