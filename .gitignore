@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Environment files with secrets — .env.example is the committed template
+.env
+.env.*
+!.env.example
+
+# Build output
+client/dist/
+
+# Logs and editor noise
+*.log
+.DS_Store

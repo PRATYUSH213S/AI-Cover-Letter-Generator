@@ -1,0 +1,142 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1c2330;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f2f4f8;
+}
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+.page-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.status {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e3e7ee;
+  color: #5a6474;
+}
+
+.status-online {
+  background: #ddf3e4;
+  color: #1c7440;
+}
+
+.status-offline {
+  background: #fbe3e3;
+  color: #a13232;
+}
+
+.inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 720px) {
+  .inputs {
+    grid-template-columns: 1fr;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.field textarea {
+  font: inherit;
+  font-weight: 400;
+  padding: 12px;
+  border: 1px solid #c6cdd9;
+  border-radius: 8px;
+  resize: vertical;
+  background: #fff;
+}
+
+.field textarea:focus {
+  outline: 2px solid #4f6ef7;
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.generate-button {
+  margin-top: 20px;
+  padding: 12px 24px;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: #4f6ef7;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.generate-button:hover:not(:disabled) {
+  background: #3d59e0;
+}
+
+.generate-button:disabled {
+  background: #a9b4cf;
+  cursor: not-allowed;
+}
+
+.error {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fbe9e9;
+  color: #a13232;
+  font-size: 0.9rem;
+}
+
+.output {
+  margin-top: 28px;
+}
+
+.output h2 {
+  font-size: 1.05rem;
+  margin: 0 0 10px;
+}
+
+.cover-letter {
+  margin: 0;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #d8dde7;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  min-height: 120px;
+}
+
+.hint {
+  color: #5a6474;
+  font-size: 0.9rem;
+}
