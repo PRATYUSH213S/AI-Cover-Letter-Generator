@@ -21,13 +21,13 @@ export default function App() {
     setError("");
     setCoverLetter("");
 
-    // Mirrors the server checks so obvious mistakes are caught without a round trip
-    if (!resume.trim()) {
-      setError("Please enter your resume text.");
+    // Mirrors the server checks so obvious mistakes are caught before an API call
+    if (resume.trim().length < 30) {
+      setError("Please paste a more complete resume (at least 30 characters).");
       return;
     }
-    if (!jobDescription.trim()) {
-      setError("Please enter the target job description.");
+    if (jobDescription.trim().length < 30) {
+      setError("Please paste the job description you are applying for (at least 30 characters).");
       return;
     }
 
@@ -102,12 +102,13 @@ export default function App() {
       {error && <p className="error">{error}</p>}
 
       <section className="output">
-        <h2>Generated cover letter</h2>
+        <h2>Generated cover letter (raw Markdown)</h2>
         {coverLetter ? (
           <pre className="cover-letter">{coverLetter}</pre>
         ) : (
           <p className="hint">
-            The generated cover letter will appear here.
+            The generated cover letter will appear here as raw Markdown.
+            Formatting and copy-to-clipboard arrive in Phase 2.
           </p>
         )}
       </section>

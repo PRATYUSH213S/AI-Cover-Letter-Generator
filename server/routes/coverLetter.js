@@ -1,11 +1,12 @@
 import { Router } from "express";
+import { generateCoverLetter } from "../openaiClient.js";
 import { validateCoverLetterRequest } from "../validate.js";
 
 const router = Router();
 
 const MAX_FIELD_CHARS = 20000;
 
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
   const { resume, jobDescription } = req.body ?? {};
 
   const invalidRequest = validateCoverLetterRequest(resume, jobDescription, MAX_FIELD_CHARS);
@@ -13,19 +14,27 @@ router.post("/", (req, res) => {
     return res.status(invalidRequest.status).json(invalidRequest.body);
   }
 
-  // LLM provider integration (OpenAI/Gemini) is Phase 1 of Sprint 04 and is
-  // deliberately not implemented yet. No fake or placeholder responses.
   if (!process.env.OPENAI_API_KEY) {
     return res.status(503).json({
-      error:
-        "LLM provider is not configured yet. Set OPENAI_API_KEY in server/.env. " +
-        "Generation will be enabled with the Phase 1 provider integration.",
+      error: "OpenAI is not configured on this server. Set OPENAI_API_KEY in server/.env.",
     });
   }
 
-  return res.status(501).json({
-    error: "LLM provider integration is not implemented yet (Sprint 04 Phase 1).",
-  });
+  try {
+    const coverLetter = await generateCoverLetter({
+      resume: resume.trim(),
+      jobDescription: jobDescription.trim(),
+    });
+    return res.json({ coverLetter });
+  } catch (err) {
+    // err from generateCoverLetter is already sanitized; anything else is a
+    // real bug on our side and only its existence is logged, never its text.
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    console.error("Unhandled error in cover letter route:", err);
+    return res.status(500).json({ error: "Cover letter generation failed." });
+  }
 });
 
 export default router;
