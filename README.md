@@ -44,14 +44,36 @@ traffic goes through the Express backend.
 | `OPENAI_API_KEY` not set on server | `503` |
 | OpenAI auth error / rate limit / server error / unreachable | `401`, `429` or `502` with a safe message (provider details stay in server logs only) |
 
-`GET /api/health` → `{ "status": "ok", "llmConfigured": <bool> }`
+`POST /api/cover-letter/stream` — same body and validation, but the generation is
+delivered as Server-Sent Events while the model writes it:
+
+```
+data: {"token":"# Cover Letter\n\n"}   # one per model delta
+data: {"retry":{"attempt":1,"delayMs":1000}}   # transient failure being backed off
+data: {"error":"..."}                 # safe message, stream then closes
+data: {"done":true}
+```
+
+The client reads it with `fetch` + `response.body.getReader()` (EventSource cannot
+POST). `GET /api/health` → `{ "status": "ok", "llmConfigured": <bool> }`
+
+## Retry policy (Phase 3)
+
+- 429, 5xx and network errors retry with exponential backoff: 1s, 2s, 4s,
+  max 3 retries, honoring a sane `Retry-After` header when the provider sends one.
+- Never retried: invalid input (rejected with 400 before any provider call),
+  401/403 credential/config problems.
+- After exhaustion the browser gets one safe message; the full error stays server-side.
+- Once any token has been streamed the connection is never retried mid-letter;
+  the error is reported instead. The Stop button (AbortController) cancels cleanly.
 
 ## Sprint 04 phases
 
 - [x] Phase 1 — OpenAI SDK integration, strict system prompt (forced Markdown
       structure, resume-only facts, no invented content), secure server-side POST
 - [ ] Phase 2 — Markdown parsing → HTML rendering, Clipboard API copy
-- [ ] Phase 3 — HTTP 429 handling, exponential backoff, streamed progressive rendering
+- [x] Phase 3 — 429 exponential backoff with bounded retries, SSE streaming with
+      progressive word-by-word rendering in React
 
 ## Test notes
 

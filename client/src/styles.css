@@ -31,22 +31,10 @@ body {
   font-size: 1.6rem;
 }
 
-.status {
-  font-size: 0.8rem;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: #e3e7ee;
+.status-line {
+  margin-top: 14px;
   color: #5a6474;
-}
-
-.status-online {
-  background: #ddf3e4;
-  color: #1c7440;
-}
-
-.status-offline {
-  background: #fbe3e3;
-  color: #a13232;
+  font-size: 0.9rem;
 }
 
 .inputs {
@@ -85,8 +73,13 @@ body {
   border-color: transparent;
 }
 
-.generate-button {
+.actions {
+  display: flex;
+  gap: 12px;
   margin-top: 20px;
+}
+
+.generate-button {
   padding: 12px 24px;
   font: inherit;
   font-weight: 600;
@@ -104,6 +97,21 @@ body {
 .generate-button:disabled {
   background: #a9b4cf;
   cursor: not-allowed;
+}
+
+.stop-button {
+  padding: 12px 18px;
+  font: inherit;
+  font-weight: 600;
+  color: #a13232;
+  background: #fff;
+  border: 1px solid #d9a2a2;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.stop-button:hover {
+  background: #fbe9e9;
 }
 
 .error {
