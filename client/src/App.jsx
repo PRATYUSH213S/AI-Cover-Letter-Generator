@@ -119,12 +119,39 @@ export default function App() {
   return (
     <main className="page">
       <header className="page-header">
-        <h1>AI Cover Letter</h1>
+        <div className="brand">
+          <h1>
+            AI Cover Letter <span className="brand-accent">Generator</span>
+          </h1>
+          <p className="subtitle">
+            Paste your resume and the job description — the cover letter streams in below.
+          </p>
+        </div>
+        <div className="badges">
+          <span className="badge">
+            <span className="badge-dot badge-dot-blue" />
+            Powered by Gemini
+          </span>
+          <span className="badge">
+            <span className="badge-dot badge-dot-green" />
+            Secure &amp; Private
+          </span>
+          <span className="badge">
+            <span className="badge-dot badge-dot-purple" />
+            Professional · ATS-friendly
+          </span>
+        </div>
       </header>
 
       <section className="inputs">
-        <label className="field">
-          <span>Your resume</span>
+        <label className="field field-resume">
+          <span className="field-head">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path d="M14 2v6h6" />
+            </svg>
+            Your resume
+          </span>
           <textarea
             value={resume}
             onChange={(event) => setResume(event.target.value)}
@@ -134,8 +161,14 @@ export default function App() {
           />
         </label>
 
-        <label className="field">
-          <span>Target job description</span>
+        <label className="field field-jd">
+          <span className="field-head">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="2" y="7" width="20" height="14" rx="2" />
+              <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+            </svg>
+            Target job description
+          </span>
           <textarea
             value={jobDescription}
             onChange={(event) => setJobDescription(event.target.value)}
@@ -160,11 +193,6 @@ export default function App() {
             Stop
           </button>
         )}
-        {coverLetter && !isGenerating && (
-          <button type="button" className="copy-button" onClick={handleCopy}>
-            {copyState === "copied" ? "Copied!" : copyState === "failed" ? "Copy failed" : "Copy to Clipboard"}
-          </button>
-        )}
       </div>
 
       {isGenerating && !coverLetter && (
@@ -181,7 +209,19 @@ export default function App() {
       )}
 
       <section className="output">
-        <h2>Generated cover letter</h2>
+        <div className="output-head">
+          <h2>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z" />
+            </svg>
+            Generated Cover Letter
+          </h2>
+          {coverLetter && !isGenerating && (
+            <button type="button" className="copy-button" onClick={handleCopy}>
+              {copyState === "copied" ? "Copied!" : copyState === "failed" ? "Copy failed" : "Copy to Clipboard"}
+            </button>
+          )}
+        </div>
         {coverLetter ? (
           // Safe: letterHtml is Markdown run through marked + DOMPurify; this is
           // React's standard escape hatch for sanitizer-approved HTML.
