@@ -4,6 +4,7 @@ React + JavaScript (Vite) frontend, Node.js + Express backend, Google Gemini via
 official @google/genai SDK on the server only. No database: the Sprint 04 directive
 requires no persistent storage, so MongoDB is intentionally absent.
 
+ live link : https://ai-cover-letter-generator-cuhq.vercel.app/
 ## Structure
 
 ```
